@@ -1,0 +1,298 @@
+from rest_framework.decorators import api_view,permission_classes
+from rest_framework.response import Response
+
+# Create your views here.
+from django.contrib.auth import authenticate, login
+
+from django.contrib.auth.models import User,Group
+
+from rest_framework import viewsets, permissions, filters,generics,serializers
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.pagination import PageNumberPagination
+from django.core.mail import send_mail
+from .models import Course, Enrollment, Assignment, Sponsorship, Notification,Payment
+from .serializers import AdminDashboardSerializer, CourseSerializer, EnrollmentSerializer, AssignmentSerializer, LoginSerializer, SponsorshipSerializer, NotificationSerializer,RegisterSerializer
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from .serializers import LoginSerializer
+from rest_framework.permissions import IsAuthenticated
+
+
+
+from django.contrib.auth.models import User, Group
+from rest_framework.decorators import api_view
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.pagination import PageNumberPagination
+from django.db.models import Sum, Avg
+
+# Pagination
+class StandardResultsSetPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+
+def check_group(user, group_name):
+    return user.groups.filter(name=group_name).exists()
+# Admin Dashboard
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+
+def admin_dashboard_list(request):
+    if not check_group(request.user, 'Admin'):
+        return Response({'error': 'You do not have permission for this dashboard.'}, status=403)
+    total_users = User.objects.count()
+    active_courses = Course.objects.count()  # adjust if you have is_active field
+    total_enrollments = Enrollment.objects.count()
+
+    data = {
+        "total_users": total_users,
+        "active_courses": active_courses,
+        "total_enrollments": total_enrollments
+    }
+    serializer = AdminDashboardSerializer(data)
+
+    return Response(data)
+
+
+# Sponsor Dashboard
+'''@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+
+def sponsor_dashboard(request):
+    if not check_group(request.user, 'Sponsor'):
+        return Response({'error': 'You do not have permission for this dashboard.'}, status=403)
+    
+    total_sponsored_funds = Sponsorship.objects.aggregate(total_funds=Sum('amount'))['total_funds'] or 0
+    total_used_funds = 0  # Remove used_amount since model doesn't have it
+
+    students_sponsored = User.objects.filter(sponsorship__isnull=False).distinct().count()
+    enrollments = Enrollment.objects.filter(student__sponsorship__isnull=False)
+    avg_progress = enrollments.aggregate(avg_progress=Avg('progress'))['avg_progress'] if enrollments.exists() else 0
+
+    fund_utilization_percent = (total_used_funds / total_sponsored_funds * 100) if total_sponsored_funds > 0 else 0
+
+    data = {
+        "total_sponsored_funds": total_sponsored_funds,
+        "total_used_funds": total_used_funds,
+        "fund_utilization_percent": fund_utilization_percent,
+        "students_sponsored": students_sponsored,
+        "average_student_progress": avg_progress
+    }
+
+    return Response(data)'''
+
+from django.db.models import Sum, Avg
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def sponsor_dashboard(request):
+    if not check_group(request.user, 'Sponsor'):
+        return Response({'error': 'You do not have permission for this dashboard.'}, status=403)
+    
+    # Total funds from Sponsorships
+    total_sponsored_funds = Sponsorship.objects.aggregate(total_funds=Sum('amount'))['total_funds'] or 0
+    total_used_funds = 0  # keep 0 for now since you don't track used_amount
+
+    # Students sponsored (using the correct related name)
+    students_sponsored = User.objects.filter(sponsored_students__isnull=False).distinct().count()
+    
+    # Enrollments of sponsored students
+    enrollments = Enrollment.objects.filter(student__sponsored_students__isnull=False)
+    avg_progress = enrollments.aggregate(avg_progress=Avg('progress'))['avg_progress'] if enrollments.exists() else 0
+
+    fund_utilization_percent = (total_used_funds / total_sponsored_funds * 100) if total_sponsored_funds > 0 else 0
+
+    data = {
+        "total_sponsored_funds": total_sponsored_funds,
+        "total_used_funds": total_used_funds,
+        "fund_utilization_percent": fund_utilization_percent,
+        "students_sponsored": students_sponsored,
+        "average_student_progress": avg_progress
+    }
+
+    return Response(data)
+
+
+
+# Registration Serializer
+class UserRegisterSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True)
+
+    class Meta:
+        model = User
+        fields = ['username', 'email', 'password']
+
+    def create(self, validated_data):
+        user = User.objects.create_user(
+            username=validated_data['username'],
+            email=validated_data['email'],
+            password=validated_data['password']
+        )
+        return user
+
+
+# Registration View
+class RegisterStudentView(generics.CreateAPIView):
+    serializer_class = UserRegisterSerializer
+    permission_classes = [AllowAny]
+
+    def perform_create(self, serializer):
+        user = serializer.save()
+        student_group, created = Group.objects.get_or_create(name='Student')
+        user.groups.add(student_group)
+
+
+# Login View (class-based)
+class LoginView(generics.GenericAPIView):
+    serializer_class = LoginSerializer
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data['user']
+        return Response({
+            "message": "Login successful",
+            "username": user.username,
+        })
+
+
+
+
+
+
+from rest_framework import viewsets, permissions
+from rest_framework.filters import SearchFilter
+from django_filters.rest_framework import DjangoFilterBackend
+
+class CourseViewSet(viewsets.ModelViewSet):
+    serializer_class = CourseSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    queryset = Course.objects.none()  # ✅ safer
+
+    filter_backends = [SearchFilter, DjangoFilterBackend]
+    search_fields = ['title', 'instructor__username']
+    filterset_fields = ['difficulty']
+
+    def get_queryset(self):
+        user = self.request.user
+
+        if user.is_superuser or user.groups.filter(name='Admin').exists():
+            return Course.objects.all()
+
+        if user.groups.filter(name='Instructor').exists():
+            return Course.objects.filter(instructor=user)
+
+        if user.groups.filter(name='student').exists():
+            return Course.objects.all()
+
+        return Course.objects.none()
+
+
+
+# Enrollments
+class EnrollmentViewSet(viewsets.ModelViewSet):
+    serializer_class = EnrollmentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.groups.filter(name='Student').exists():
+            return Enrollment.objects.filter(student=user)
+        elif user.groups.filter(name='Instructor').exists():
+            return Enrollment.objects.filter(course__instructor=user)
+        return Enrollment.objects.none()
+
+# Assessments
+class AssignmentViewSet(viewsets.ModelViewSet):
+    queryset = Assignment.objects.all()
+    serializer_class = AssignmentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+
+# Sponsorships
+class SponsorshipViewSet(viewsets.ModelViewSet):
+    queryset = Sponsorship.objects.all()
+    serializer_class = SponsorshipSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [filters.SearchFilter, DjangoFilterBackend]
+    search_fields = ['student__username','sponsor__username']
+    filterset_fields = ['status']
+
+# Notifications
+class NotificationViewSet(viewsets.ModelViewSet):
+    serializer_class = NotificationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        # Short-circuit schema generation for Swagger
+        if getattr(self, 'swagger_fake_view', False):
+            return Notification.objects.none()
+
+        return Notification.objects.filter(user=self.request.user)
+
+
+# Example: Sending notification emails
+def send_course_deadline_email(student_email, course_name):
+    send_mail(
+        subject=f'Course Deadline: {course_name}',
+        message=f'Dear Student, your course "{course_name}" deadline is approaching!',
+        from_email='no-reply@lms.com',
+        recipient_list=[student_email],
+        fail_silently=False
+    )
+
+
+
+
+
+
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from .models import Enrollment
+from .utils import (
+    send_student_deadline_email,
+    send_sponsor_progress_email
+)
+
+@api_view(['POST'])
+def notify_students_deadline(request):
+    enrollments = Enrollment.objects.all()
+    for e in enrollments:
+        send_student_deadline_email(
+            e.student.email,
+            e.course.name,
+            "2026-02-01"
+        )
+    return Response({"message": "Student deadline emails sent"})
+
+@api_view(['POST'])
+def notify_sponsors_progress(request):
+    for e in Enrollment.objects.all():
+        if hasattr(e.student, 'sponsored_students'):
+            sponsor = e.student.sponsored_students.first().sponsor
+            send_sponsor_progress_email(
+                sponsor.email,
+                e.student.username,
+                e.progress
+            )
+    return Response({"message": "Sponsor progress emails sent"})
+
+
+from .models import Payment
+from rest_framework.permissions import IsAuthenticated
+
+@api_view(['POST'])
+def make_payment(request):
+    Payment.objects.create(
+        sponsor=request.user,
+        student_id=request.data['student_id'],
+        amount=request.data['amount']
+    )
+    return Response({"message": "Payment successful"})
+
+
+
+
