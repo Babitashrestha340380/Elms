@@ -1,5 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from .views import sponsor_khalti_init, sponsor_khalti_verify
 
 from .views import (
     CourseViewSet,
@@ -14,6 +15,7 @@ from .views import (
     send_sponsor_progress_email,
     LoginView,
     make_payment,
+    send_email_api,
 )
 
 # -------------------------
@@ -43,6 +45,13 @@ urlpatterns = [
     # Email Triggers (Admin only)
     path('notify/students/', send_student_deadline_email, name='notify-students'),
     path('notify/sponsors/', send_sponsor_progress_email, name='notify-sponsors'),
-        path('make-payment/', make_payment),
+    path('make-payment/', make_payment),
+    path("email/send/", send_email_api),
+     path("payment/sponsor/init/", sponsor_khalti_init),
+    path("payment/sponsor/verify/", sponsor_khalti_verify),
+
 
 ]
+
+
+

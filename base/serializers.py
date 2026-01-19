@@ -29,10 +29,15 @@ class SponsorshipSerializer(serializers.ModelSerializer):
         model = Sponsorship
         fields = '__all__'
 
+# base/serializers.py
+from rest_framework import serializers
+from base.models import Notification
+
 class NotificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Notification
-        fields = '__all__'
+        fields = ['id', 'message', 'is_read', 'created_at']
+
 
 
 
@@ -151,12 +156,28 @@ class LoginSerializer(serializers.Serializer):
 
 
 # serializers.py
+from rest_framework import serializers
+
 class AdminDashboardSerializer(serializers.Serializer):
     total_students = serializers.IntegerField()
     total_courses = serializers.IntegerField()
-    message = serializers.CharField()
+    total_enrollments = serializers.IntegerField()
 
 class StudentDashboardSerializer(serializers.Serializer):
     enrolled_courses = serializers.IntegerField()
     completed_assignments = serializers.IntegerField()
     message = serializers.CharField()
+
+
+
+
+# base/serializers.py
+from rest_framework import serializers
+
+class EmailSendSerializer(serializers.Serializer):
+    subject = serializers.CharField(max_length=255)
+    message = serializers.CharField()
+    recipients = serializers.ListField(
+        child=serializers.EmailField(),
+        help_text="List of recipient emails"
+    )

@@ -40,7 +40,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'base',
+    'base.apps.BaseConfig',
+
     'rest_framework',
     'django_filters',
     'drf_yasg',
@@ -151,8 +152,30 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 10
 }
 
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'  # For test
+'''EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'  # For test
 DEFAULT_FROM_EMAIL = 'no-reply@lms.com'
+'''
+
+
+
+
+# settings.py
+'''CELERY_BROKER_URL = "redis://localhost:6379/0"
+CELERY_RESULT_BACKEND = "redis://localhost:6379/0"
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = "Asia/Kathmandu"
+'''
+
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = "smtp.gmail.com"
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = "shresthababita119@gmail.com"
+EMAIL_HOST_PASSWORD = "oeti fuiz adjs wuxx"
+
+DEFAULT_FROM_EMAIL = "no-reply@lms.com"
 
 
 SWAGGER_SETTINGS = {
@@ -164,3 +187,8 @@ SWAGGER_SETTINGS = {
         }
     },
 }
+
+
+KHALTI_SECRET_KEY = "41a2209c16d94fd58fae685333421815"
+KHALTI_INITIATE_URL = "https://dev.khalti.com/api/v2/epayment/initiate/"
+KHALTI_LOOKUP_URL = "https://dev.khalti.com/api/v2/epayment/lookup/"
